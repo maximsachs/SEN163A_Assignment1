@@ -1,1 +1,1 @@
-head -n 10000 transactions.csv > transactions_test.csv 
+head -n 100000 transactions.csv > transactions_test_100k.csv 
