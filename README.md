@@ -1,6 +1,9 @@
 # Requirements
 
 ```
-conda install pandas numpy matplotlib
-pip install wget tqdm
+conda install wget tqdm pandas numpy matplotlib
+```
+or
+```
+pip install wget tqdm pandas numpy matplotlib
 ```
