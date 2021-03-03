@@ -12,7 +12,7 @@ from collections import defaultdict
 
 graphs_folder = "graphs"
 if not os.path.exists(graphs_folder):
-  os.makedirs(graphs_folder)
+    os.makedirs(graphs_folder)
 
 con = sqlite3.connect('./transaction_data.db')
 cur = con.cursor()
@@ -58,17 +58,17 @@ def read_to_pandas():
             df[col] = pd.to_numeric(df[col])
     return df
 
-if __main__ == "__name__":
-    if not os.path.exists("df_transactions.csv"):
+if __name__ == "__main__":
+    if not os.path.exists("transactions.csv"):
         describe_table()
         get_first_record()
         df = read_to_pandas()
         df.set_index("tx_index", inplace=True, drop=False)
-        df.to_csv("df_transactions.csv")
+        df.to_csv("transactions.csv")
         print(df.dtypes)
         print(df)
     else:
-        df = pandas.read_csv("df_transactions.csv")
+        df = pd.read_csv("transactions.csv")
     
     # Doing the actual processing.
     # Describing the general dataset:
@@ -142,9 +142,102 @@ if __main__ == "__name__":
     print(f"The top account receives {int(top_address_transaction_count)} which corresponds to a total transaction amount received of {top_address_transaction_sum}.")
     print(amount_received_per_nameDest)
 
-    # 
+    # Checking for middle man addresses
     print("Middle man addresses might be malicious if they often receive amounts and then immediately send it onwards.")
-    print("This could beamount_sent_per_nameOrig identified by comparing the total amount received by an address to the total amount being sent by an address.")
+    print("This could be amount_sent_per_nameOrig identified by comparing the total amount received by an address to the total amount being sent by an address.")
     amount_sent_per_nameOrig = df.groupby("nameOrig")["amount"].agg(['mean', 'count', 'sum'])
     amount_sent_per_nameOrig.sort_values("count", inplace=True, ascending=False)
     print(amount_sent_per_nameOrig)
+
+    # Lets see if there is overlap between the addresses receiving transactions and those sending.
+    # At the moment 0 interesections are found, but this could be an artefact of limiting to the top 100k transactions.
+    set_receiving_addresses = set(amount_received_per_nameDest.index.values)
+    set_sending_addresses = set(amount_sent_per_nameOrig.index.values)
+    addresses_both_sending_and_receiving = set_receiving_addresses.intersection(set_sending_addresses)
+    print(f"There are {len(addresses_both_sending_and_receiving)} addresses both sending and receiving.")
+    suspicious_transactions_origin = df[df['nameOrig'].isin(addresses_both_sending_and_receiving)].copy()
+    suspicious_transactions_dest = df[df['nameDest'].isin(addresses_both_sending_and_receiving)].copy()
+    suspicious_transactions_origin.sort_values("nameOrig", inplace=True)
+    suspicious_transactions_dest.sort_values("nameDest", inplace=True)
+    print(suspicious_transactions_origin)
+    print(suspicious_transactions_dest)
+
+    # Looking at activity throughout time:
+    fig, axs = plt.subplots(3, sharex=True)
+    df["amount"] = df["amount"].divide(1000)
+    transactoins_per_timestamp = df.groupby("timestamp")["amount"].agg(['mean', 'count', 'sum'])
+    transactoins_per_timestamp["sum"].plot(lw=1, ax = axs[0])
+    axs[0].legend()
+    axs[0].set_ylabel("Total Transaction amount")
+    axs[1].set_ylabel("Mean Transaction amount")
+    axs[0].set_xlabel("Timestamp Tick")
+    axs[0].grid()
+    transactoins_per_timestamp["mean"].plot(ax=axs[1], lw=1, style="-", color="r")
+    axs[1].grid()
+    axs[1].legend()
+    transactoins_per_timestamp["count"].plot(ax=axs[2],lw=1, style="-",color="g")
+    axs[2].grid()
+    axs[2].set_xlabel("Timestamp Tick")
+    axs[2].legend()
+    axs[2].set_ylabel("Transaction count")
+    fig = plt.gcf()
+    fig.set_size_inches(13, 8)
+    plt.savefig(os.path.join(graphs_folder, "transactions_per_tick_stacked.pdf"), bbox_inches='tight')
+    plt.show()
+
+    # Seeing if addresses send to themselves:
+    # The following output is empty, so no transaction is sending to itself.
+    print(df[df["nameOrig"] == df["nameDest"]])
+
+    # Distributions of addresses starting with M or C:
+    set_all_addresses = set(df["nameOrig"]).union(set(df["nameDest"]))
+    first_letter_counter = defaultdict(lambda: 0)
+    for address in set_all_addresses:
+        first_letter = address[0]
+        first_letter_counter[first_letter] += 1
+    print(first_letter_counter)
+
+    # Hacker Analysis:
+    amount_received_per_nameDest = df.groupby("nameDest")["amount"].agg(['mean', 'count', 'sum'])
+    print(amount_received_per_nameDest)
+    amount_received_per_nameDest.sort_values("count", inplace=True, ascending=False)
+    top_address_transaction_count = amount_received_per_nameDest.iloc[0]["count"]
+    top_address_transaction_sum = amount_received_per_nameDest.iloc[0]["sum"]
+    top_address = amount_received_per_nameDest.index[0]
+    print(f"The top account {top_address} receive {int(top_address_transaction_count)} transactions which corresponds to a total transaction amount received of {top_address_transaction_sum}.")
+    # Which errors occurred?
+    # Adding the transaction error as a new column
+    df["new_balance_error"] = df["oldbalanceDest"] + df["amount"] - df["newbalanceDest"]
+    print("The following errors were found:")
+    print(df["new_balance_error"].unique())
+    inconsistent_new_balances = df[df["new_balance_error"] != 0].copy()
+    inconsistent_new_balances["nibbling_tx"] = np.nan
+    print(inconsistent_new_balances)
+    # Ratio of error values:
+    print(inconsistent_new_balances.groupby("new_balance_error").size()/inconsistent_new_balances.shape[0])
+    # Getting all transactions to the suspicious address:
+    # All transactions to the suspicious address:
+    transactions_to_suspicious_account = df[df["nameDest"] == "C52983754"].copy()
+    transactions_to_suspicious_account["nibbled_tx"] = np.nan
+    transactions_to_suspicious_account.set_index("nameOrig", inplace=True, drop=False)
+    transactions_to_suspicious_account.dropna(axis=0, how="all", inplace=True)
+    print(transactions_to_suspicious_account)
+
+    # # For the first 10k transactions lets identify the corresponding nibbling tx:
+    # # Lets check if any addresses that have a rounding error also made a transaction to the suspicious account!
+    # # We dont need all columns so lets simplify:
+    # tx_sus_account = transactions_to_suspicious_account[["tx_index", "amount", "timestamp", "nameOrig"]].copy()
+    # tx_sus_account.dropna(axis=0, how="all", inplace=True)
+    # print(tx_sus_account)
+    # for row_index, sus in tqdm(inconsistent_new_balances[:10000].iterrows()):
+    #     # There should be exactly 1 nibbled tx for each rounding error.!
+    #     try:
+    #         nib_tx = tx_sus_account.loc[sus["nameOrig"]]
+    #         if nib_tx["amount"] == sus["new_balance_error"]:
+    #             # If the transaction has the same amount as the rounding error, its likely a nibbled tx!
+    #             transactions_to_suspicious_account.loc[sus["nameOrig"], "nibbled_tx"] = row_index
+    #             inconsistent_new_balances.loc[row_index, "nibbling_tx"] = nib_tx["tx_index"]
+    #     except KeyError:
+    #         pass
+    # print(transactions_to_suspicious_account[["tx_index", "timestamp", "amount", "nameOrig", "nameDest", "nibbled_tx"]][:10].to_latex(index=False))
+    # print(inconsistent_new_balances.dropna()[["tx_index", "timestamp", "amount", "nameOrig", "nameDest", "nibbling_tx"]][:10].to_latex(index=False))
