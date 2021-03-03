@@ -93,6 +93,7 @@ if __name__ == "__main__":
     fig = plt.gcf()
     fig.set_size_inches(11, 5)
     plt.savefig(os.path.join(graphs_folder, "Histogram_account_balances_stacked.pdf"), bbox_inches='tight')
+    plt.close("all")
 
     # Graphing transaction amounts:
     ax = df["amount"].hist(bins=50)
@@ -102,6 +103,7 @@ if __name__ == "__main__":
     fig = plt.gcf()
     fig.set_size_inches(11, 3)
     plt.savefig(os.path.join(graphs_folder, "Histogram_Transaction_amounts.pdf"), bbox_inches='tight')
+    plt.close("all")
 
     # Graphing amount distribution:
     account_balances = df["newbalanceOrig"].copy()
@@ -115,6 +117,7 @@ if __name__ == "__main__":
     fig = plt.gcf()
     fig.set_size_inches(11, 4)
     plt.savefig(os.path.join(graphs_folder, "Account_balance_distribution.pdf"), bbox_inches='tight')
+    plt.close("all")
     richest_balance = account_balances.iloc[-1]
     print(f"Richest account has {richest_balance}")
     top_to_show = 0.01
@@ -183,7 +186,7 @@ if __name__ == "__main__":
     fig = plt.gcf()
     fig.set_size_inches(13, 8)
     plt.savefig(os.path.join(graphs_folder, "transactions_per_tick_stacked.pdf"), bbox_inches='tight')
-    plt.show()
+    plt.close("all")
 
     # Seeing if addresses send to themselves:
     # The following output is empty, so no transaction is sending to itself.
